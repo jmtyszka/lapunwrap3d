@@ -26,15 +26,10 @@ def main():
     print('Unwrapping phase')
     lpu = LaplacianPhaseUnwrap3D(phi_w)
     phi_uw = lpu.unwrap()
-    phi_uw_corr = lpu.correct()
 
     print(f'Saving unwrapped phase image to {phi_uw_fname}')
     phi_uw_nii = nib.Nifti1Image(phi_uw, affine=phi_w_nii.affine)
     phi_uw_nii.to_filename(phi_uw_fname)
-
-    print(f'Saving corrected unwrapped phase image to {phi_uw_corr_fname}')
-    phi_uw_corr_nii = nib.Nifti1Image(phi_uw_corr, affine=phi_w_nii.affine)
-    phi_uw_corr_nii.to_filename(phi_uw_corr_fname)
 
 
 if __name__ == '__main__':
