@@ -1,68 +1,83 @@
 """
-ChatGPT 4o port of original Matlab code from the qMRLab package to python 3.10
-- Refactored, corrected and optimized as a python class by JMT
+Laplacian phase unwrapping in 3D
+
+AUTHOR : Mike Tyszka
+PLACE  : Caltech Brain Imaging Center
+DATES  : 2024-10-13 JMT Implement directly from Schofield and Zhu 2003
+         2024-10-14 JMT Skip iterative phase difference correct - doesn't work
 """
 
 import numpy as np
-from scipy.fft import fftn, ifftn, fftshift
+import matplotlib.pyplot as plt
+import nibabel as nib
+from numpy.fft import (fftn, ifftn, fftshift)
 
 
 class LaplacianPhaseUnwrap3D():
 
     def __init__(self, phi_w):
 
+        # Check dimensionality of phi_w
+        ndims = phi_w.ndim
+        if ndims < 3 or ndims > 4:
+            raise ValueError('LaplacianPhaseUnwrap3D requires 3D or 3D x t phase images')
+        self._ndims = ndims
+
         self.phi_w = phi_w
         self.phi_uw = np.zeros_like(phi_w)
-        self.phi_uw_corr = np.zeros_like(phi_w)
+
+        # Useful image dimensions
+        nx, ny, nz = self.phi_w.shape[0:3]
+        hx, hy, hz = nx // 2, ny // 2, nz // 2
+
+        # k-space coordinate meshes
+        kx = np.arange(-hx, hx) / nx
+        ky = np.arange(-hy, hy) / ny
+        kz = np.arange(-hz, hz) / nz
+        kxm, kym, kzm = np.meshgrid(kx, ky, kz)
+
+        # Precalculate Laplacian operator and its inverse in k-space
+        self._lap_k = fftshift(kxm ** 2 + kym ** 2 + kzm ** 2)
+        self._invlap_k = np.reciprocal(self._lap_k, out=np.zeros_like(self._lap_k), where=self._lap_k != 0)
 
     def unwrap(self):
 
+        phi_uw = np.zeros_like(self.phi_w)
+
+        if self._ndims == 3:
+            phi_uw = self._unwrap3d(self.phi_w)
+
+        if self._ndims == 4:
+            for tc in range(self.phi_w.shape[-1]):
+                phi_uw[..., tc] = self._unwrap3d(self.phi_w[..., tc])
+
+        self.phi_uw = phi_uw
+
+        return phi_uw
+
+    def _unwrap3d(self, phi_w):
         """
         Fourier Laplacian phase unwrapping in 3D
-
-        - Initially ported from the qMRLab Matlab function unwrapPhaseLaplacian.m (ChatGTP 4o)
-        - Corrected, refactored and optimized for python (JMT)
+        - Direct implementation of Schofield and Zhu 2003 algorithm
         """
 
-        # Get the size of the wrapped phase input
-        nx, ny, nz = self.phi_w.shape
-        hx, hy, hz = nx // 2, ny // 2, nz // 2
+        # Pre-calculate sine and cosine of wrapped phase image
+        cos_phi_w = np.cos(phi_w)
+        sin_phi_w = np.sin(phi_w)
 
-        # Kernel widths and half widths
-        kx, ky, kz = 3, 3, 3
-        hkx, hky, hkz = (kx - 1)//2, (ky - 1)//2, (kz - 1)//2
-
-        # Discrete Laplacian operator kernel
-        lap_kernel = np.array([
-                [[ 0,  0,  0], [ 0, -1,  0], [0,  0, 0]],
-                [[ 0, -1,  0], [-1,  6, -1], [0, -1, 0]],
-                [[ 0,  0,  0], [ 0, -1,  0], [0,  0, 0]],
-        ])
-
-        # Center and zero-pad kernel to image size
-        lap = np.zeros([nx, ny, nz])
-        lap[hx-hkx:hx+hkx+1, hy-hky:hy+hky+1, hz-hkz:hz+hkz+1] = lap_kernel
-
-        # FFT of the zero-padded Laplacian kernel
-        # Note that if the centered Laplacian kernel is fftshifted initially
-        # there's no need to fftshift anywhere else. Stick low frequency at edges/corners of k-space
-        fft_lap = fftn(fftshift(lap))
-
-        # Reciprocal of Laplacian FFT
-        # Mask zeros for division
-        fft_lap_recip = np.zeros_like(fft_lap)
-        nonzero = fft_lap.nonzero()
-        fft_lap_recip[nonzero] = 1.0 / fft_lap[nonzero]
-
-        # Compute the Laplacian of the phase by Fourier convolution
-        sin_phi = np.sin(self.phi_w)
-        cos_phi = np.cos(self.phi_w)
-        fft_lap_phase = (
-            cos_phi * ifftn(fftn(sin_phi) * fft_lap) -
-            sin_phi * ifftn(fftn(cos_phi) * fft_lap)
+        phi_uw = np.real(
+            self._invlap(
+                cos_phi_w * self._lap(sin_phi_w) -
+                sin_phi_w * self._lap(cos_phi_w),
+            )
         )
 
-        # Laplacian unwrapped 3D phase image
-        self.phi_uw = np.real(ifftn(fftn(fft_lap_phase) * fft_lap_recip))
+        return phi_uw
 
-        return self.phi_uw
+    def _lap(self, x):
+        return ifftn(fftn(x) * self._lap_k)
+
+    def _invlap(self, x):
+        return ifftn(fftn(x) * self._invlap_k)
+
+

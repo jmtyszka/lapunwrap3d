@@ -7,7 +7,7 @@ def main():
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Laplacian phase unwrap in 3D')
-    parser.add_argument('-i', '--infile', required=True, help='Nifti phase image in range -pi to pi')
+    parser.add_argument('-i', '--infile', required=True, help='3D or 3D x t Nifti phase image in range -pi to pi')
 
     args = parser.parse_args()
     phi_w_fname = args.infile
@@ -16,7 +16,6 @@ def main():
     phi_w_fstub = phi_w_fname.rsplit('.', 1)[0].rsplit('.', 1)[0]
 
     phi_uw_fname = f"{phi_w_fstub}_lapuw.nii.gz"
-    phi_uw_corr_fname = f"{phi_w_fstub}_lapuw_corr.nii.gz"
 
     # Load phase image
     print('Loading wrapped phase image')
