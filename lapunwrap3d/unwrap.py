@@ -31,10 +31,11 @@ class LaplacianPhaseUnwrap3D():
         hx, hy, hz = nx // 2, ny // 2, nz // 2
 
         # k-space coordinate meshes
+        # Use 'ij' indexing to preserve dimension order in output meshes
         kx = np.arange(-hx, hx) / nx
         ky = np.arange(-hy, hy) / ny
         kz = np.arange(-hz, hz) / nz
-        kxm, kym, kzm = np.meshgrid(kx, ky, kz)
+        kxm, kym, kzm = np.meshgrid(kx, ky, kz, indexing='ij')
 
         # Precalculate Laplacian operator and its inverse in k-space
         self._lap_k = fftshift(kxm ** 2 + kym ** 2 + kzm ** 2)
